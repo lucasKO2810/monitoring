@@ -1,0 +1,56 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: local
+    stack: distributed-observability
+
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - prometheus:9090
+
+  - job_name: node-exporter
+    static_configs:
+      - targets:
+          - node-exporter:9100
+
+  - job_name: otel-collector
+    static_configs:
+      - targets:
+          - otel-collector:9464
+
+  - job_name: loki
+    static_configs:
+      - targets:
+          - loki:3100
+
+  - job_name: tempo
+    static_configs:
+      - targets:
+          - tempo:3200
+
+  - job_name: sample-services
+    metrics_path: /metrics
+    dns_sd_configs:
+      - names:
+          - frontend
+          - orders
+          - inventory
+          - payments
+        type: A
+        port: 8080
+        refresh_interval: 15s
+    relabel_configs:
+      - target_label: app_network
+        replacement: distributed-sample-net

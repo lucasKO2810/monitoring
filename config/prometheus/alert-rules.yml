@@ -1,0 +1,132 @@
+groups:
+  - name: distributed-service-health
+    rules:
+      - alert: ServiceDown
+        expr: up{job=~"sample-services|node-exporter|otel-collector|loki|tempo"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} is down"
+          description: "Prometheus has not been able to scrape {{ $labels.instance }} for more than one minute."
+
+      - alert: HighServiceErrorRate
+        expr: |
+          (
+            sum by (service) (rate(http_requests_total{job="sample-services", status_code=~"5.."}[2m]))
+            /
+            clamp_min(sum by (service) (rate(http_requests_total{job="sample-services"}[2m])), 0.001)
+          ) > 0.10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} has a high 5xx rate"
+          description: "More than 10% of requests to {{ $labels.service }} have returned 5xx responses for two minutes."
+          dashboard: "/d/service-detail?var-service={{ $labels.service }}"
+
+      - alert: CriticalServiceErrorRate
+        expr: |
+          (
+            sum by (service) (rate(http_requests_total{job="sample-services", status_code=~"5.."}[2m]))
+            /
+            clamp_min(sum by (service) (rate(http_requests_total{job="sample-services"}[2m])), 0.001)
+          ) > 0.25
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} has a critical 5xx rate"
+          description: "More than 25% of requests to {{ $labels.service }} have returned 5xx responses."
+          dashboard: "/d/service-detail?var-service={{ $labels.service }}"
+
+      - alert: HighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, service) (rate(http_request_duration_seconds_bucket{job="sample-services"}[5m]))
+          ) > 0.75
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} p95 latency is high"
+          description: "{{ $labels.service }} p95 latency has been above 750 ms for five minutes."
+          dashboard: "/d/service-detail?var-service={{ $labels.service }}"
+
+      - alert: HighP99Latency
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le, service) (rate(http_request_duration_seconds_bucket{job="sample-services"}[5m]))
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} p99 latency exceeds 2s"
+          description: "{{ $labels.service }} p99 latency has been above 2 seconds for five minutes."
+
+  - name: slo-burn-rate
+    rules:
+      - alert: CheckoutSLOBurnRateCritical
+        expr: |
+          (
+            sum(rate(http_requests_total{job="sample-services", service="frontend", route="/checkout", status_code=~"5.."}[1h]))
+            /
+            clamp_min(sum(rate(http_requests_total{job="sample-services", service="frontend", route="/checkout"}[1h])), 0.001)
+          ) / 0.001 > 14.4
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Checkout SLO burn rate is critical (1h window)"
+          description: "The 1h error budget burn rate for /checkout exceeds 14.4x. At this rate, the entire 30d error budget will be exhausted in under 2 hours."
+          dashboard: "/d/slo-error-budget"
+
+      - alert: CheckoutSLOBurnRateHigh
+        expr: |
+          (
+            sum(rate(http_requests_total{job="sample-services", service="frontend", route="/checkout", status_code=~"5.."}[6h]))
+            /
+            clamp_min(sum(rate(http_requests_total{job="sample-services", service="frontend", route="/checkout"}[6h])), 0.001)
+          ) / 0.001 > 6
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Checkout SLO burn rate is elevated (6h window)"
+          description: "The 6h error budget burn rate for /checkout exceeds 6x. The error budget is being consumed faster than sustainable."
+          dashboard: "/d/slo-error-budget"
+
+  - name: infrastructure-health
+    rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle", job="node-exporter"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host CPU usage is above 85%"
+          description: "CPU usage has been above 85% for 5 minutes."
+          dashboard: "/d/infrastructure"
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"})) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host memory usage is above 90%"
+          description: "Memory usage has been above 90% for 5 minutes."
+          dashboard: "/d/infrastructure"
+
+      - alert: ObservabilityStackDown
+        expr: up{job=~"loki|tempo|otel-collector"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} is down"
+          description: "The observability component {{ $labels.job }} ({{ $labels.instance }}) has been unreachable for 2 minutes. Monitoring data may be lost."
+          dashboard: "/d/infrastructure"

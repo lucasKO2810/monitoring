@@ -1,0 +1,240 @@
+name: distributed-observability
+
+x-sample-build: &sample-build
+  context: ./sample-services
+  dockerfile: Dockerfile
+
+x-sample-env: &sample-env
+  OTEL_SERVICE_NAMESPACE: sample-commerce
+  DEPLOYMENT_ENVIRONMENT: local
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+  LOG_LEVEL: info
+
+x-sample-service: &sample-service
+  build: *sample-build
+  restart: unless-stopped
+  networks:
+    - sample-app
+    - observability
+  labels:
+    observability.stack: distributed-observability
+  depends_on:
+    otel-collector:
+      condition: service_started
+
+services:
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - observability
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+      - --web.enable-admin-api
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus-data:/prometheus
+      - ./config/prometheus:/etc/prometheus:ro
+    networks:
+      - observability
+    depends_on:
+      alertmanager:
+        condition: service_started
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - alertmanager-data:/alertmanager
+      - ./config/alertmanager:/etc/alertmanager:ro
+    networks:
+      - observability
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: loki
+    restart: unless-stopped
+    command:
+      - -config.file=/etc/loki/loki.yml
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+      - ./config/loki/loki.yml:/etc/loki/loki.yml:ro
+    networks:
+      - observability
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    container_name: promtail
+    restart: unless-stopped
+    command:
+      - -config.file=/etc/promtail/promtail.yml
+    volumes:
+      - ./config/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - observability
+    depends_on:
+      loki:
+        condition: service_started
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: tempo
+    restart: unless-stopped
+    command:
+      - -config.file=/etc/tempo/tempo.yml
+    ports:
+      - "3200:3200"
+    volumes:
+      - tempo-data:/var/tempo
+      - ./config/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+    networks:
+      - observability
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.116.1
+    container_name: otel-collector
+    restart: unless-stopped
+    command:
+      - --config=/etc/otelcol-contrib/config.yml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "9464:9464"
+    volumes:
+      - ./config/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
+    networks:
+      - observability
+    depends_on:
+      tempo:
+        condition: service_started
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: node-exporter
+    restart: unless-stopped
+    networks:
+      - observability
+
+  frontend:
+    <<: *sample-service
+    command: uvicorn services.frontend:app --host 0.0.0.0 --port 8080
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *sample-env
+      SERVICE_NAME: frontend
+      ORDERS_URL: http://orders:8080
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  orders:
+    <<: *sample-service
+    command: uvicorn services.orders:app --host 0.0.0.0 --port 8080
+    environment:
+      <<: *sample-env
+      SERVICE_NAME: orders
+      INVENTORY_URL: http://inventory:8080
+      PAYMENTS_URL: http://payments:8080
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  inventory:
+    <<: *sample-service
+    command: uvicorn services.inventory:app --host 0.0.0.0 --port 8080
+    environment:
+      <<: *sample-env
+      SERVICE_NAME: inventory
+      INVENTORY_LOW_STOCK_RATE: ${INVENTORY_LOW_STOCK_RATE:-0.10}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  payments:
+    <<: *sample-service
+    command: uvicorn services.payments:app --host 0.0.0.0 --port 8080
+    environment:
+      <<: *sample-env
+      SERVICE_NAME: payments
+      PAYMENT_FAILURE_RATE: ${PAYMENT_FAILURE_RATE:-0.08}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  load-generator:
+    build: *sample-build
+    command: python -m services.load_generator
+    restart: unless-stopped
+    environment:
+      <<: *sample-env
+      SERVICE_NAME: load-generator
+      FRONTEND_URL: http://frontend:8080
+      REQUEST_INTERVAL_SECONDS: ${REQUEST_INTERVAL_SECONDS:-0.75}
+    networks:
+      - sample-app
+      - observability
+    depends_on:
+      frontend:
+        condition: service_healthy
+
+volumes:
+  grafana-data:
+  prometheus-data:
+  alertmanager-data:
+  loki-data:
+  tempo-data:
+
+networks:
+  observability:
+    name: observability-net
+  sample-app:
+    name: distributed-sample-net

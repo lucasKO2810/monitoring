@@ -1,0 +1,218 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    { "asDropdown": false, "icon": "arrow-left", "includeVars": false, "keepTime": true, "tags": [], "targetBlank": false, "title": "← Global Overview", "type": "link", "url": "/d/global-overview" }
+  ],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Percentage of /checkout requests completing successfully (non-5xx) over a 30-day rolling window.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.999 }, { "color": "green", "value": 0.9995 }] },
+          "unit": "percentunit",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "1 - (\n  sum(increase(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\", status_code=~\"5..\"}[30d]))\n  /\n  clamp_min(sum(increase(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\"}[30d])), 1)\n)", "legendFormat": "Checkout Availability", "refId": "A", "instant": true }],
+      "title": "Checkout Availability (30d)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Target: 99.9% of /checkout requests succeed within 750ms.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "percentunit",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 6, "y": 0 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "vector(0.999)", "legendFormat": "SLO Target", "refId": "A", "instant": true }],
+      "title": "SLO Target",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "How much error budget remains. 100% means no errors consumed. 0% means the SLO is breached.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.25 }, { "color": "green", "value": 0.5 }] },
+          "unit": "percentunit",
+          "decimals": 1,
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 10, "y": 0 },
+      "id": 3,
+      "options": { "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showThresholdLabels": false, "showThresholdMarkers": true, "sizing": "auto" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "clamp_min(\n  1 - (\n    (\n      sum(increase(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\", status_code=~\"5..\"}[30d]))\n      /\n      clamp_min(sum(increase(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\"}[30d])), 1)\n    )\n    / 0.001\n  )\n, 0)", "legendFormat": "Error Budget Remaining", "refId": "A", "instant": true }],
+      "title": "Error Budget Remaining",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Rate at which error budget is being consumed over the last hour. >1 means budget is being consumed faster than the 30d window allows.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 3 }] },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 0 },
+      "id": 4,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "(\n  sum(rate(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\", status_code=~\"5..\"}[1h]))\n  /\n  clamp_min(sum(rate(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\"}[1h])), 0.001)\n) / 0.001", "legendFormat": "1h Burn Rate", "refId": "A" }],
+      "title": "1h Burn Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Rate at which error budget is being consumed over the last 6 hours.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 3 }] },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 0 },
+      "id": 5,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value_and_name" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "(\n  sum(rate(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\", status_code=~\"5..\"}[6h]))\n  /\n  clamp_min(sum(rate(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\"}[6h])), 0.001)\n) / 0.001", "legendFormat": "6h Burn Rate", "refId": "A" }],
+      "title": "6h Burn Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "green", "mode": "fixed" },
+          "custom": { "drawStyle": "line", "fillOpacity": 15, "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never", "thresholdsStyle": { "mode": "line" } },
+          "unit": "percentunit",
+          "decimals": 3,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": null }] },
+          "min": 0.99
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
+      "id": 6,
+      "options": { "legend": { "calcs": ["lastNotNull", "min"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "1 - (\n  sum(rate(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\", status_code=~\"5..\"}[1h]))\n  /\n  clamp_min(sum(rate(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\"}[1h])), 0.001)\n)", "legendFormat": "Checkout Availability (1h window)", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "vector(0.999)", "legendFormat": "SLO Target (99.9%)", "refId": "B" }
+      ],
+      "title": "Checkout Availability Trend",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never" },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
+      "id": 7,
+      "options": { "legend": { "calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "(\n  sum(rate(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\", status_code=~\"5..\"}[1h]))\n  /\n  clamp_min(sum(rate(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\"}[1h])), 0.001)\n) / 0.001", "legendFormat": "1h burn rate", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "(\n  sum(rate(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\", status_code=~\"5..\"}[6h]))\n  /\n  clamp_min(sum(rate(http_requests_total{job=\"sample-services\", service=\"frontend\", route=\"/checkout\"}[6h])), 0.001)\n) / 0.001", "legendFormat": "6h burn rate", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "vector(1)", "legendFormat": "Budget threshold", "refId": "C" }
+      ],
+      "title": "Burn Rate Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Per-service availability (1 - 5xx rate) over 5-minute windows.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.99 }, { "color": "green", "value": 0.999 }] },
+          "unit": "percentunit",
+          "decimals": 3,
+          "custom": { "align": "center", "cellOptions": { "mode": "gradient", "type": "color-background" } }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "id": 8,
+      "options": { "showHeader": true, "sortBy": [{ "desc": false, "displayName": "Value" }], "cellHeight": "md" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "1 - (\n  sum by (service) (rate(http_requests_total{job=\"sample-services\", status_code=~\"5..\"}[5m]))\n  /\n  clamp_min(sum by (service) (rate(http_requests_total{job=\"sample-services\"}[5m])), 0.001)\n)", "legendFormat": "{{service}}", "refId": "A", "instant": true, "format": "table" }],
+      "title": "Per-Service Availability",
+      "type": "table",
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": { "Value": "Availability", "service": "Service" } } }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Latency SLO: 99th percentile of /checkout latency should stay below 750ms.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never", "thresholdsStyle": { "mode": "line" } },
+          "unit": "s",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.75 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "id": 9,
+      "options": { "legend": { "calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"sample-services\", service=\"frontend\", route=\"/checkout\"}[5m])))", "legendFormat": "Checkout p99", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "vector(0.75)", "legendFormat": "SLO Target (750ms)", "refId": "B" }
+      ],
+      "title": "Checkout Latency P99 vs SLO",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["observability", "slo", "error-budget", "production"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "3 - SLO / Error Budget",
+  "uid": "slo-error-budget",
+  "version": 1
+}
