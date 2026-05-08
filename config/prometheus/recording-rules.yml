@@ -1,0 +1,54 @@
+groups:
+  - name: slo-recording-rules
+    interval: 30s
+    rules:
+      # ---- Checkout error ratio (short windows for burn-rate alerts) ----
+      - record: slo:checkout_error_ratio:rate1h
+        expr: |
+          sum(rate(http_requests_total{job="sample-services", service="frontend", route="/checkout", status_code=~"5.."}[1h]))
+          /
+          clamp_min(sum(rate(http_requests_total{job="sample-services", service="frontend", route="/checkout"}[1h])), 0.001)
+
+      - record: slo:checkout_error_ratio:rate6h
+        expr: |
+          sum(rate(http_requests_total{job="sample-services", service="frontend", route="/checkout", status_code=~"5.."}[6h]))
+          /
+          clamp_min(sum(rate(http_requests_total{job="sample-services", service="frontend", route="/checkout"}[6h])), 0.001)
+
+      # ---- Per-service RED metrics (pre-aggregated for dashboard speed) ----
+      - record: service:http_request_rate:rate5m
+        expr: sum by (service) (rate(http_requests_total{job="sample-services"}[5m]))
+
+      - record: service:http_error_ratio:rate5m
+        expr: |
+          sum by (service) (rate(http_requests_total{job="sample-services", status_code=~"5.."}[5m]))
+          /
+          clamp_min(sum by (service) (rate(http_requests_total{job="sample-services"}[5m])), 0.001)
+
+      - record: service:http_latency_p95:rate5m
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, service) (rate(http_request_duration_seconds_bucket{job="sample-services"}[5m]))
+          )
+
+      - record: service:http_latency_p99:rate5m
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le, service) (rate(http_request_duration_seconds_bucket{job="sample-services"}[5m]))
+          )
+
+      # ---- Global availability ----
+      - record: global:availability:rate5m
+        expr: |
+          1 - (
+            sum(rate(http_requests_total{job="sample-services", status_code=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(http_requests_total{job="sample-services"}[5m])), 0.001)
+          )
+
+      # ---- Burn rates (pre-computed for SLO dashboard) ----
+      - record: slo:checkout_burn_rate:1h
+        expr: slo:checkout_error_ratio:rate1h / 0.001
+
+      - record: slo:checkout_burn_rate:6h
+        expr: slo:checkout_error_ratio:rate6h / 0.001
