@@ -21,6 +21,13 @@ x-sample-service: &sample-service
   depends_on:
     otel-collector:
       condition: service_started
+  deploy:
+    resources:
+      limits:
+        cpus: "0.50"
+        memory: 256M
+      reservations:
+        memory: 128M
 
 services:
   grafana:
@@ -34,6 +41,14 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_STRICT_TRANSPORT_SECURITY: "true"
+      GF_SECURITY_CONTENT_SECURITY_POLICY: "true"
+      GF_SECURITY_X_CONTENT_TYPE_OPTIONS: "true"
+      GF_SECURITY_X_XSS_PROTECTION: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_LOG_LEVEL: warn
     volumes:
       - grafana-data:/var/lib/grafana
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -42,11 +57,24 @@ services:
       - observability
     depends_on:
       prometheus:
-        condition: service_started
+        condition: service_healthy
       loki:
-        condition: service_started
+        condition: service_healthy
       tempo:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
 
   prometheus:
     image: prom/prometheus:v2.54.1
@@ -55,10 +83,11 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=5GB
+      - --storage.tsdb.wal-compression
       - --web.enable-lifecycle
-      - --web.enable-admin-api
-    ports:
-      - "9090:9090"
+      - --web.enable-remote-write-receiver
     volumes:
       - prometheus-data:/prometheus
       - ./config/prometheus:/etc/prometheus:ro
@@ -66,7 +95,20 @@ services:
       - observability
     depends_on:
       alertmanager:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:9090/-/healthy || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          memory: 512M
 
   alertmanager:
     image: prom/alertmanager:v0.27.0
@@ -75,13 +117,25 @@ services:
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
-    ports:
-      - "9093:9093"
+      - --data.retention=120h
     volumes:
       - alertmanager-data:/alertmanager
       - ./config/alertmanager:/etc/alertmanager:ro
     networks:
       - observability
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:9093/-/healthy || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+        reservations:
+          memory: 64M
 
   loki:
     image: grafana/loki:3.2.1
@@ -89,13 +143,24 @@ services:
     restart: unless-stopped
     command:
       - -config.file=/etc/loki/loki.yml
-    ports:
-      - "3100:3100"
     volumes:
       - loki-data:/loki
       - ./config/loki/loki.yml:/etc/loki/loki.yml:ro
     networks:
       - observability
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:3100/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          memory: 256M
 
   promtail:
     image: grafana/promtail:3.2.1
@@ -106,11 +171,25 @@ services:
     volumes:
       - ./config/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail-positions:/tmp
     networks:
       - observability
     depends_on:
       loki:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:9080/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          memory: 64M
 
   tempo:
     image: grafana/tempo:2.6.1
@@ -118,13 +197,24 @@ services:
     restart: unless-stopped
     command:
       - -config.file=/etc/tempo/tempo.yml
-    ports:
-      - "3200:3200"
     volumes:
       - tempo-data:/var/tempo
       - ./config/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
     networks:
       - observability
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:3200/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          memory: 256M
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.116.1
@@ -135,21 +225,45 @@ services:
     ports:
       - "4317:4317"
       - "4318:4318"
-      - "9464:9464"
     volumes:
       - ./config/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
     networks:
       - observability
     depends_on:
       tempo:
-        condition: service_started
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
 
   node-exporter:
     image: prom/node-exporter:v1.8.2
     container_name: node-exporter
     restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /:/host:ro,rslave
     networks:
       - observability
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:9100/metrics || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+        reservations:
+          memory: 32M
 
   frontend:
     <<: *sample-service
@@ -232,6 +346,7 @@ volumes:
   alertmanager-data:
   loki-data:
   tempo-data:
+  promtail-positions:
 
 networks:
   observability:

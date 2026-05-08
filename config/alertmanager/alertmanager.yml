@@ -1,16 +1,58 @@
 global:
   resolve_timeout: 5m
+  # Uncomment and configure for production email alerts:
+  # smtp_smarthost: 'smtp.example.com:587'
+  # smtp_from: 'alertmanager@example.com'
+  # smtp_auth_username: 'alertmanager@example.com'
+  # smtp_auth_password: '<secret>'
+  # smtp_require_tls: true
 
 route:
-  receiver: local-dev
+  receiver: default
   group_by:
     - alertname
     - service
-  group_wait: 15s
-  group_interval: 1m
+  group_wait: 30s
+  group_interval: 5m
   repeat_interval: 4h
+  routes:
+    - receiver: critical
+      match:
+        severity: critical
+      group_wait: 10s
+      repeat_interval: 1h
+    - receiver: default
+      match:
+        severity: warning
 
 receivers:
-  - name: local-dev
+  - name: default
+    # Configure for production. Example Slack:
+    # slack_configs:
+    #   - api_url: '${SLACK_WEBHOOK_URL}'
+    #     channel: '#monitoring-warnings'
+    #     send_resolved: true
+    #     title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+    #     text: '{{ .CommonAnnotations.description }}'
+
+  - name: critical
+    # Configure for production. Example PagerDuty + Slack:
+    # pagerduty_configs:
+    #   - service_key: '${PAGERDUTY_SERVICE_KEY}'
+    # slack_configs:
+    #   - api_url: '${SLACK_WEBHOOK_URL}'
+    #     channel: '#monitoring-critical'
+    #     send_resolved: true
+    #     title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+    #     text: '{{ .CommonAnnotations.description }}'
+
+inhibit_rules:
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal:
+      - alertname
+      - service
 
 templates: []

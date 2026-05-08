@@ -109,10 +109,48 @@ For Prometheus scraping, expose a `/metrics` endpoint from your service and add 
 Starter alerts live in `config/prometheus/alert-rules.yml`:
 
 - service scrape target down
-- high service 5xx rate
-- high p95 latency
+- high service 5xx rate (warning >10%, critical >25%)
+- high p95 / p99 latency
+- SLO burn rate alerts (1h and 6h windows for /checkout)
+- infrastructure alerts (CPU, memory, observability stack down)
 
-`config/alertmanager/alertmanager.yml` intentionally uses a local receiver with no outbound notifications. Add Slack, email, Teams, or webhook receiver config there when you are ready to send real alerts.
+`config/alertmanager/alertmanager.yml` routes critical and warning alerts to separate receivers with inhibit rules. Add Slack, PagerDuty, email, or webhook receiver config there when you are ready to send real alerts.
+
+## Dashboards
+
+Seven production-style Grafana dashboards are provisioned automatically:
+
+| # | Dashboard | Purpose |
+|---|-----------|---------|
+| 1 | Global Overview | System health, active alerts, traffic, error rate, P95 latency, service health |
+| 2 | Service Detail | Per-service RED metrics, route breakdown, status codes, logs (service selector) |
+| 3 | SLO / Error Budget | Checkout 99.9% SLO, error budget remaining, 1h/6h burn rates, per-service availability |
+| 4 | Distributed Tracing | Trace search, dependency chain latency, failed request volume, error logs with trace links |
+| 5 | Logs Explorer | Log volume, error/warning trends, service+level filters, trace ID search |
+| 6 | Infrastructure | Host CPU/memory/disk/network, observability stack health, Prometheus scrape stats |
+| 7 | Alerting Overview | Firing/pending alerts, alert timeline, breakdown by severity and service |
+
+All dashboards cross-link via the top navigation bar.
+
+## Resource Requirements
+
+The monitoring stack has the following resource limits configured:
+
+| Component | CPU Limit | Memory Limit | Memory Reserved | Disk |
+|---|---|---|---|---|
+| Prometheus | 1.0 | 1 GB | 512 MB | 5 GB (15-day retention) |
+| Loki | 1.0 | 1 GB | 256 MB | ~2–5 GB (14-day retention) |
+| Tempo | 1.0 | 1 GB | 256 MB | ~1–3 GB (72h retention) |
+| Grafana | 1.0 | 512 MB | 128 MB | ~100 MB |
+| OTel Collector | 1.0 | 512 MB | 128 MB | — (stateless) |
+| Promtail | 0.5 | 256 MB | 64 MB | ~1 MB |
+| Alertmanager | 0.25 | 128 MB | 64 MB | ~50 MB |
+| Node Exporter | 0.25 | 128 MB | 32 MB | — (stateless) |
+| **Totals** | **6.0** | **4.5 GB** | **1.4 GB** | **~8–13 GB** |
+
+Minimum host: **4 CPU cores, 8 GB RAM** (including sample services), **20 GB disk**.
+
+Under light load (~1–2 req/s), the stack typically idles at ~0.5 CPU and ~1–1.5 GB RAM. The limits provide headroom for query spikes, compaction, and burst ingestion.
 
 ## Stop
 

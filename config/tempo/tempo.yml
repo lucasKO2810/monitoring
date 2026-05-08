@@ -1,6 +1,7 @@
 server:
   http_listen_port: 3200
   grpc_listen_port: 9095
+  log_level: warn
 
 distributor:
   receivers:
@@ -12,16 +13,34 @@ distributor:
           endpoint: 0.0.0.0:4318
 
 ingester:
-  trace_idle_period: 10s
-  max_block_bytes: 1000000
-  max_block_duration: 5m
+  trace_idle_period: 30s
+  max_block_bytes: 52428800
+  max_block_duration: 10m
+  flush_check_period: 10s
 
 compactor:
   compaction:
-    compaction_window: 1h
-    max_block_bytes: 100000000
-    block_retention: 24h
-    compacted_block_retention: 10m
+    compaction_window: 4h
+    max_block_bytes: 524288000
+    block_retention: 72h
+    compacted_block_retention: 1h
+
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors:
+        - service-graphs
+        - span-metrics
 
 storage:
   trace:

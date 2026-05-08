@@ -1,12 +1,14 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  scrape_timeout: 10s
   external_labels:
     environment: local
     stack: distributed-observability
 
 rule_files:
   - /etc/prometheus/alert-rules.yml
+  - /etc/prometheus/recording-rules.yml
 
 alerting:
   alertmanagers:

@@ -9,6 +9,11 @@ datasources:
     isDefault: true
     jsonData:
       httpMethod: POST
+      timeInterval: "15s"
+      queryTimeout: "60s"
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
 
   - name: Loki
     uid: loki
@@ -16,6 +21,8 @@ datasources:
     access: proxy
     url: http://loki:3100
     jsonData:
+      maxLines: 1000
+      timeout: "60s"
       derivedFields:
         - datasourceUid: tempo
           matcherRegex: '"trace_id":"([a-f0-9]+)"'
@@ -39,3 +46,17 @@ datasources:
             value: service
       tracesToMetrics:
         datasourceUid: prometheus
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"
+        tags:
+          - key: service.name
+            value: service
+        queries:
+          - name: "Request Rate"
+            query: "sum(rate(http_requests_total{service=\"$${__tags.service}\"}[5m]))"
+          - name: "Error Rate"
+            query: "sum(rate(http_requests_total{service=\"$${__tags.service}\", status_code=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total{service=\"$${__tags.service}\"}[5m])), 0.001)"
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true

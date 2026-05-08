@@ -9,10 +9,12 @@ receivers:
 processors:
   memory_limiter:
     check_interval: 1s
-    limit_mib: 512
+    limit_mib: 400
+    spike_limit_mib: 100
   batch:
     timeout: 5s
     send_batch_size: 1024
+    send_batch_max_size: 2048
   resource:
     attributes:
       - key: observability.stack
@@ -24,15 +26,33 @@ exporters:
     endpoint: tempo:4317
     tls:
       insecure: true
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 1000
   prometheus:
     endpoint: 0.0.0.0:9464
     namespace: otel
     resource_to_telemetry_conversion:
       enabled: true
-  debug:
-    verbosity: basic
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
 
 service:
+  extensions:
+    - health_check
+  telemetry:
+    logs:
+      level: warn
+    metrics:
+      level: normal
   pipelines:
     traces:
       receivers:
@@ -43,7 +63,6 @@ service:
         - batch
       exporters:
         - otlp/tempo
-        - debug
     metrics:
       receivers:
         - otlp
@@ -53,4 +72,3 @@ service:
         - batch
       exporters:
         - prometheus
-        - debug
