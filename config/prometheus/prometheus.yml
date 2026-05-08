@@ -52,5 +52,7 @@ scrape_configs:
         port: 8080
         refresh_interval: 15s
     relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: service
       - target_label: app_network
         replacement: distributed-sample-net

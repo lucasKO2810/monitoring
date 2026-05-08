@@ -373,7 +373,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "label_replace(up{job=\"sample-services\"}, \"display\", \"$1 ($2)\", \"instance\", \"(.+)\")",
+          "expr": "up{job=\"sample-services\"}",
           "legendFormat": "{{service}} ({{instance}})",
           "refId": "A"
         }
