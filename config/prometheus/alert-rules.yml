@@ -130,3 +130,25 @@ groups:
           summary: "{{ $labels.job }} is down"
           description: "The observability component {{ $labels.job }} ({{ $labels.instance }}) has been unreachable for 2 minutes. Monitoring data may be lost."
           dashboard: "/d/infrastructure"
+
+  - name: sla-breach
+    rules:
+      - alert: ServiceSLABreach
+        expr: service:http_availability:rate24h < 0.999
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} is breaching its SLA"
+          description: "{{ $labels.service }} 24h HTTP availability ({{ $value | humanizePercentage }}) is below the 99.9% SLA target."
+          dashboard: "/d/slo-error-budget"
+
+      - alert: ServiceUptimeBreach
+        expr: service:probe_uptime:avg24h < 0.999
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} uptime is below SLA"
+          description: "{{ $labels.service }} 24h probe uptime ({{ $value | humanizePercentage }}) is below the 99.9% SLA target."
+          dashboard: "/d/slo-error-budget"

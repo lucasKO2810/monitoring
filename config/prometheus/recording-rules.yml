@@ -52,3 +52,49 @@ groups:
 
       - record: slo:checkout_burn_rate:6h
         expr: slo:checkout_error_ratio:rate6h / 0.001
+
+  - name: sla-availability-rules
+    interval: 30s
+    rules:
+      # ---- Per-service probe uptime (scrape reachability) ----
+      - record: service:probe_uptime:avg1h
+        expr: avg by (service) (avg_over_time(up{job="sample-services"}[1h]))
+
+      - record: service:probe_uptime:avg24h
+        expr: avg by (service) (avg_over_time(up{job="sample-services"}[24h]))
+
+      - record: service:probe_uptime:avg7d
+        expr: avg by (service) (avg_over_time(up{job="sample-services"}[7d]))
+
+      # ---- Per-service HTTP availability (request success rate) ----
+      - record: service:http_availability:rate1h
+        expr: |
+          1 - (
+            sum by (service) (rate(http_requests_total{job="sample-services", status_code=~"5.."}[1h]))
+            /
+            clamp_min(sum by (service) (rate(http_requests_total{job="sample-services"}[1h])), 0.001)
+          )
+
+      - record: service:http_availability:rate24h
+        expr: |
+          1 - (
+            sum by (service) (rate(http_requests_total{job="sample-services", status_code=~"5.."}[24h]))
+            /
+            clamp_min(sum by (service) (rate(http_requests_total{job="sample-services"}[24h])), 0.001)
+          )
+
+      - record: service:http_availability:rate7d
+        expr: |
+          1 - (
+            sum by (service) (rate(http_requests_total{job="sample-services", status_code=~"5.."}[7d]))
+            /
+            clamp_min(sum by (service) (rate(http_requests_total{job="sample-services"}[7d])), 0.001)
+          )
+
+      # ---- Infrastructure probe uptime ----
+      - record: infra:probe_uptime:avg24h
+        expr: avg by (job) (avg_over_time(up{job=~"prometheus|loki|tempo|otel-collector|node-exporter"}[24h]))
+
+      # ---- Downtime minutes (24h) ----
+      - record: service:downtime_minutes:24h
+        expr: (1 - avg by (service) (avg_over_time(up{job="sample-services"}[24h]))) * 1440
